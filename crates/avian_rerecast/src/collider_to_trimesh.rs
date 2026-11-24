@@ -5,7 +5,7 @@ use avian3d::{
     parry::{
         bounding_volume::Aabb,
         math::{Real, Vector},
-        shape::{Compound, HeightField, Triangle, TypedShape},
+        shape::{Compound, HeightField, SharedShape, Triangle, TypedShape},
     },
     prelude::*,
 };
@@ -75,8 +75,8 @@ impl ColliderToTriMesh for Collider {
         clip: Option<&Aabb3d>,
         heightfield_stride: usize,
     ) -> Option<TriMesh> {
-        shape_to_trimesh(
-            &self.shape_scaled().as_typed_shape(),
+        shape_to_trimesh_clipped(
+            self.shape_scaled(),
             pos.into(),
             rot.into(),
             subdivisions,
@@ -84,6 +84,26 @@ impl ColliderToTriMesh for Collider {
             heightfield_stride,
         )
     }
+}
+
+/// [`ColliderToTriMesh::to_trimesh_clipped`] of a collider's (scaled) shape: what the backend's
+/// gather converts off the main thread, holding the shape and not the collider.
+pub(crate) fn shape_to_trimesh_clipped(
+    shape: &SharedShape,
+    pos: Position,
+    rot: Rotation,
+    subdivisions: u32,
+    clip: Option<&Aabb3d>,
+    heightfield_stride: usize,
+) -> Option<TriMesh> {
+    shape_to_trimesh(
+        &shape.as_typed_shape(),
+        pos,
+        rot,
+        subdivisions,
+        clip,
+        heightfield_stride,
+    )
 }
 
 /// `clip` in the shape's local frame: the box around its eight corners.

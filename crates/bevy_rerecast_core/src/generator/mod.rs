@@ -15,7 +15,7 @@ use rerecast::{Aabb3d, DetailNavmesh, HeightfieldBuilder, TriMesh};
 mod upgradable_asset_id;
 use upgradable_asset_id::UpgradableAssetId;
 
-use crate::{Navmesh, NavmeshBackend, NavmeshSettings};
+use crate::{Navmesh, NavmeshBackend, NavmeshSettings, ObstacleGather};
 
 pub(super) fn plugin(app: &mut App) {
     app.init_resource::<NavmeshQueue>();
@@ -100,6 +100,9 @@ fn drain_queue_into_tasks(world: &mut World) {
             tracing::error!("Cannot generate navmesh: No backend available");
             return;
         };
+        // The backend picks the obstacles in this frame; converting them is the task's.
+        #[cfg(feature = "tracing")]
+        let backend_span = tracing::info_span!("navmesh backend").entered();
         let obstacles = match world.run_system_with(backend.0, input.clone()) {
             Ok(obstacles) => obstacles,
             Err(err) => {
@@ -110,6 +113,8 @@ fn drain_queue_into_tasks(world: &mut World) {
                 continue;
             }
         };
+        #[cfg(feature = "tracing")]
+        drop(backend_span);
         let Some(mut tasks_queue) = world.get_resource_mut::<NavmeshTaskQueue>() else {
             #[cfg(feature = "tracing")]
             tracing::error!(
@@ -118,7 +123,7 @@ fn drain_queue_into_tasks(world: &mut World) {
             return;
         };
         let thread_pool = AsyncComputeTaskPool::get();
-        let task = thread_pool.spawn(generate_navmesh(obstacles, input));
+        let task = thread_pool.spawn(async move { generate_navmesh(obstacles, input) });
         tasks_queue.insert(handle, task);
     }
 }
@@ -165,7 +170,24 @@ fn poll_tasks(
 #[derive(Debug, Event, Deref, DerefMut)]
 pub struct NavmeshReady(pub AssetId<Navmesh>);
 
-async fn generate_navmesh(mut trimesh: TriMesh, settings: NavmeshSettings) -> Result<Navmesh> {
+/// The navmesh of `obstacles`, off the main thread: the obstacles gathered into triangles, then
+/// baked.
+fn generate_navmesh(obstacles: ObstacleGather, settings: NavmeshSettings) -> Result<Navmesh> {
+    let trimesh = {
+        #[cfg(feature = "tracing")]
+        let _span =
+            tracing::info_span!("navmesh obstacles", triangles = tracing::field::Empty).entered();
+        let trimesh = obstacles.gather();
+        #[cfg(feature = "tracing")]
+        _span.record("triangles", trimesh.indices.len());
+        trimesh
+    };
+    #[cfg(feature = "tracing")]
+    let _span = tracing::info_span!("navmesh bake").entered();
+    bake(trimesh, settings)
+}
+
+fn bake(mut trimesh: TriMesh, settings: NavmeshSettings) -> Result<Navmesh> {
     let up = settings.up;
     match up {
         Vec3::Y => {

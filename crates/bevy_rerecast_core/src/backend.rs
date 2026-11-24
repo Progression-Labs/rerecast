@@ -1,34 +1,66 @@
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 use bevy_app::prelude::*;
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{prelude::*, system::SystemId};
-use bevy_shape::Aabb3d;
 use bevy_platform::collections::HashSet;
 use bevy_reflect::prelude::*;
+use bevy_shape::Aabb3d;
 use glam::Vec3;
 use rerecast::{BuildContoursFlags, ConfigBuilder, ConvexVolume, TriMesh};
 use serde::{Deserialize, Serialize};
 
 /// The current backend registered through [`NavmeshApp::set_navmesh_backend`]
 #[derive(Resource, Debug, Clone, Deref, DerefMut)]
-pub struct NavmeshBackend(pub SystemId<In<NavmeshSettings>, TriMesh>);
+pub struct NavmeshBackend(pub SystemId<In<NavmeshSettings>, ObstacleGather>);
+
+/// What a backend hands the generator: the obstacles, still to be turned into one [`TriMesh`].
+///
+/// The backend runs on the main thread, in the frame the navmesh is queued: it should only pick
+/// the obstacles (cheap handles to their geometry and their transforms) and leave converting them
+/// to triangles to [`Self::gather`], which the generator calls in its task off the main thread.
+/// Converting a place full of colliders in the backend itself cost a frame 3.5 to 4.9 ms.
+pub struct ObstacleGather(Box<dyn FnOnce() -> TriMesh + Send + 'static>);
+
+impl ObstacleGather {
+    /// Obstacles `gather` turns into triangles when it is called.
+    pub fn new(gather: impl FnOnce() -> TriMesh + Send + 'static) -> Self {
+        Self(Box::new(gather))
+    }
+
+    /// Obstacles already in triangles.
+    pub fn ready(trimesh: TriMesh) -> Self {
+        Self::new(move || trimesh)
+    }
+
+    /// The obstacles as one trimesh in global units: the conversion the backend deferred.
+    pub fn gather(self) -> TriMesh {
+        (self.0)()
+    }
+}
+
+impl core::fmt::Debug for ObstacleGather {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("ObstacleGather")
+    }
+}
 
 /// Extension used to implement [`NavmeshApp::set_navmesh_backend`] on [`App`]
 pub trait NavmeshApp {
     /// Set the backend for generating navmesh obstacles. Only one backend can be set at a time.
     /// Setting a backend will replace any existing backend. By default, no backend is set.
     ///
-    /// The backend is supposed to return a single [`TriMesh`] containing the geometry for all obstacles in the scene in global units.
+    /// The backend is supposed to return an [`ObstacleGather`] that yields a single [`TriMesh`] containing the geometry for all obstacles in the scene in global units.
     fn set_navmesh_backend<M>(
         &mut self,
-        system: impl IntoSystem<In<NavmeshSettings>, TriMesh, M> + 'static,
+        system: impl IntoSystem<In<NavmeshSettings>, ObstacleGather, M> + 'static,
     ) -> &mut App;
 }
 
 impl NavmeshApp for App {
     fn set_navmesh_backend<M>(
         &mut self,
-        system: impl IntoSystem<In<NavmeshSettings>, TriMesh, M> + 'static,
+        system: impl IntoSystem<In<NavmeshSettings>, ObstacleGather, M> + 'static,
     ) -> &mut App {
         let id = self.register_system(system);
         self.world_mut().insert_resource(NavmeshBackend(id));

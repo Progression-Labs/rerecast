@@ -8,7 +8,7 @@ use bevy_transform::components::GlobalTransform;
 use glam::{UVec3, Vec3A};
 use rerecast::{AreaType, TriMesh};
 
-use crate::{NavmeshApp as _, NavmeshSettings};
+use crate::{NavmeshApp as _, NavmeshSettings, ObstacleGather};
 
 /// A backend for navmesh generation.
 /// Uses all entities with a [`Mesh3d`] component as navmesh obstacles.
@@ -29,12 +29,14 @@ impl Plugin for Mesh3dBackendPlugin {
 #[reflect(Component)]
 pub struct ExcludeMeshFromNavmesh;
 
+/// Picks the meshes in the frame (a copy of each, with its transform); transforming and
+/// converting them is the [`ObstacleGather`]'s, run in the generator's task.
 fn mesh3d_backend(
     input: In<NavmeshSettings>,
     meshes: Res<Assets<Mesh>>,
     obstacles: Query<(Entity, &GlobalTransform, &Mesh3d), Without<ExcludeMeshFromNavmesh>>,
-) -> TriMesh {
-    obstacles
+) -> ObstacleGather {
+    let obstacles: Vec<_> = obstacles
         .iter()
         .filter_map(|(entity, transform, mesh)| {
             if input
@@ -44,14 +46,18 @@ fn mesh3d_backend(
             {
                 return None;
             }
-            let transform = transform.compute_transform();
-            let mesh = meshes.get(mesh)?.clone().transformed_by(transform);
-            TriMesh::from_mesh(&mesh)
+            Some((meshes.get(mesh)?.clone(), transform.compute_transform()))
         })
-        .fold(TriMesh::default(), |mut acc, t| {
-            acc.extend(t);
-            acc
-        })
+        .collect();
+    ObstacleGather::new(move || {
+        obstacles
+            .into_iter()
+            .filter_map(|(mesh, transform)| TriMesh::from_mesh(&mesh.transformed_by(transform)))
+            .fold(TriMesh::default(), |mut acc, t| {
+                acc.extend(t);
+                acc
+            })
+    })
 }
 
 /// Used to add [`TriMeshFromBevyMesh::from_mesh`] to [`TriMesh`].

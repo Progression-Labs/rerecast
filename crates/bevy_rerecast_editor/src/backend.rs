@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use bevy_rerecast::{
+    ObstacleGather,
     debug::{DetailNavmeshGizmo, PolygonNavmeshGizmo},
     prelude::*,
     rerecast::TriMesh,
@@ -17,8 +18,8 @@ pub(super) fn plugin(app: &mut App) {
         .init_resource::<NavmeshObstacles>();
 }
 
-fn editor_backend(_: In<NavmeshSettings>, obstacles: Res<NavmeshObstacles>) -> TriMesh {
-    obstacles.0.clone()
+fn editor_backend(_: In<NavmeshSettings>, obstacles: Res<NavmeshObstacles>) -> ObstacleGather {
+    ObstacleGather::ready(obstacles.0.clone())
 }
 
 #[derive(Resource, Deref, DerefMut, Default)]

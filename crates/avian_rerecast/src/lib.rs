@@ -4,10 +4,11 @@ use avian3d::prelude::*;
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use bevy_reflect::prelude::*;
-use bevy_rerecast_core::{NavmeshApp as _, NavmeshSettings, rerecast::TriMesh};
+use bevy_rerecast_core::{NavmeshApp as _, NavmeshSettings, ObstacleGather, rerecast::TriMesh};
 
 mod collider_to_trimesh;
 pub use crate::collider_to_trimesh::ColliderToTriMesh;
+use crate::collider_to_trimesh::shape_to_trimesh_clipped;
 
 /// Everything you need to get started with the Navmesh plugin.
 pub mod prelude {
@@ -38,6 +39,9 @@ pub struct ExcludeColliderFromNavmesh;
 #[reflect(Component)]
 pub struct NavmeshHeightfieldStride(pub u32);
 
+/// Picks the static colliders to bake, in the frame: their shared shapes (a reference count
+/// each, no geometry copied) and poses. Converting them to triangles is the [`ObstacleGather`]'s,
+/// which the generator runs in its task.
 fn collider_backend(
     input: In<NavmeshSettings>,
     colliders: Query<
@@ -52,8 +56,8 @@ fn collider_backend(
         Without<ExcludeColliderFromNavmesh>,
     >,
     bodies: Query<&RigidBody, Without<ExcludeColliderFromNavmesh>>,
-) -> TriMesh {
-    colliders
+) -> ObstacleGather {
+    let obstacles: Vec<_> = colliders
         .iter()
         .filter_map(|(entity, collider, pos, rot, collider_of, stride)| {
             if input
@@ -67,12 +71,21 @@ fn collider_backend(
             if !body.is_static() {
                 return None;
             }
-            let subdivisions = 10;
             let stride = stride.map_or(1, |s| s.0.max(1) as usize);
-            collider.to_trimesh_clipped(*pos, *rot, subdivisions, input.aabb.as_ref(), stride)
+            Some((collider.shape_scaled().clone(), *pos, *rot, stride))
         })
-        .fold(TriMesh::default(), |mut acc, t| {
-            acc.extend(t);
-            acc
-        })
+        .collect();
+    let clip = input.aabb;
+    ObstacleGather::new(move || {
+        let subdivisions = 10;
+        obstacles
+            .into_iter()
+            .filter_map(|(shape, pos, rot, stride)| {
+                shape_to_trimesh_clipped(&shape, pos, rot, subdivisions, clip.as_ref(), stride)
+            })
+            .fold(TriMesh::default(), |mut acc, t| {
+                acc.extend(t);
+                acc
+            })
+    })
 }
