@@ -1,15 +1,10 @@
-#![expect(
-    deprecated,
-    reason = "bevy_feathers bundle templates; migrate to @FeathersButton BSN when ui uses bsn!"
-)]
-
 use bevy::{
     ecs::{
         prelude::*,
         system::{IntoObserverSystem, ObserverSystem},
     },
     feathers::{
-        controls::{ButtonBundleProps, ButtonVariant, button_bundle, checkbox_bundle},
+        controls::{ButtonVariant, FeathersButton, FeathersCheckbox},
         font_styles::InheritableFont,
         theme::{ThemeBackgroundColor, ThemedText},
         tokens,
@@ -41,6 +36,35 @@ pub(super) fn plugin(app: &mut App) {
     app.add_observer(update_primary_buttons_when_obstacle_removed);
     app.add_observer(set_ui_size);
     app.add_observer(set_font_size);
+    app.add_observer(apply_feathers_control);
+}
+
+/// A feathers control on an entity of the editor's bundle-built tree: feathers' controls are
+/// scenes, applied to the entity once it is spawned (its other components, observers and
+/// markers stay).
+#[derive(Component, Clone, Copy)]
+enum FeathersControl {
+    Button(&'static str),
+    Checkbox(&'static str),
+}
+
+fn apply_feathers_control(
+    add: On<Add<FeathersControl>>,
+    controls: Query<&FeathersControl>,
+    mut commands: Commands,
+) {
+    let Ok(&control) = controls.get(add.entity) else {
+        return;
+    };
+    let mut entity = commands.entity(add.entity);
+    match control {
+        FeathersControl::Button(label) => entity.queue_apply_scene(bsn! {
+            @FeathersButton { @caption: bsn! { Text({label}) ThemedText } }
+        }),
+        FeathersControl::Checkbox(label) => entity.queue_apply_scene(bsn! {
+            @FeathersCheckbox { @caption: bsn! { Text({label}) ThemedText } }
+        }),
+    };
 }
 
 fn spawn_ui(mut commands: Commands) {
@@ -92,11 +116,7 @@ fn ui_bundle() -> impl Bundle {
                         ConnectionInput,
                     ),
                     menu_button((
-                        button_bundle(
-                            ButtonBundleProps::default(),
-                            (),
-                            Spawn((Text::new("Load Scene"), ThemedText))
-                        ),
+                        FeathersControl::Button("Load Scene"),
                         observe(|_: On<Activate>, mut commands: Commands| {
                             commands.trigger(GetNavmeshInput);
                         }),
@@ -104,31 +124,19 @@ fn ui_bundle() -> impl Bundle {
                     )),
                     hspace(px(20)),
                     menu_button((
-                        button_bundle(
-                            ButtonBundleProps::default(),
-                            InteractionDisabled,
-                            Spawn((Text::new("Build"), ThemedText))
-                        ),
+                        (FeathersControl::Button("Build"), InteractionDisabled),
                         observe(|_: On<Activate>, mut commands: Commands| {
                             commands.trigger(BuildNavmesh);
                         }),
                         BuildNavmeshButton
                     )),
                     menu_button((
-                        button_bundle(
-                            ButtonBundleProps::default(),
-                            InteractionDisabled,
-                            Spawn((Text::new("Save"), ThemedText))
-                        ),
+                        (FeathersControl::Button("Save"), InteractionDisabled),
                         observe(save_navmesh),
                         SaveNavmeshButton
                     )),
                     menu_button((
-                        button_bundle(
-                            ButtonBundleProps::default(),
-                            InteractionDisabled,
-                            Spawn((Text::new("Load"), ThemedText))
-                        ),
+                        (FeathersControl::Button("Load"), InteractionDisabled),
                         observe(load_navmesh),
                         LoadNavmeshButton
                     )),
@@ -213,31 +221,19 @@ fn ui_bundle() -> impl Bundle {
                         },
                         children![
                             (
-                                checkbox_bundle(
-                                    Checked,
-                                    Spawn((Text::new("Show Visual"), ThemedText))
-                                ),
+                                (FeathersControl::Checkbox("Show Visual"), Checked),
                                 observe(set_gizmo(AvailableGizmos::Visual))
                             ),
                             (
-                                checkbox_bundle(
-                                    (),
-                                    Spawn((Text::new("Show Obstacles"), ThemedText))
-                                ),
+                                FeathersControl::Checkbox("Show Obstacles"),
                                 observe(set_gizmo(AvailableGizmos::Obstacles))
                             ),
                             (
-                                checkbox_bundle(
-                                    Checked,
-                                    Spawn((Text::new("Show Detail Mesh"), ThemedText))
-                                ),
+                                (FeathersControl::Checkbox("Show Detail Mesh"), Checked),
                                 observe(set_gizmo(AvailableGizmos::DetailMesh))
                             ),
                             (
-                                checkbox_bundle(
-                                    (),
-                                    Spawn((Text::new("Show Polygon Mesh"), ThemedText))
-                                ),
+                                FeathersControl::Checkbox("Show Polygon Mesh"),
                                 observe(set_gizmo(AvailableGizmos::PolyMesh))
                             )
                         ],

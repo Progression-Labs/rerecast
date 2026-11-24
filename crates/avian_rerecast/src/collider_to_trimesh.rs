@@ -108,7 +108,7 @@ pub(crate) fn shape_to_trimesh_clipped(
 
 /// `clip` in the shape's local frame: the box around its eight corners.
 fn local_aabb(clip: &Aabb3d, pos: Position, rot: Rotation) -> Aabb {
-    let pos = Vec3::from(pos.f32());
+    let pos = pos.f32();
     let inv = rot.0.f32().inverse();
     let (min, max) = (Vec3::from(clip.min), Vec3::from(clip.max));
     let (mut mins, mut maxs) = (Vec3::MAX, Vec3::MIN);
@@ -343,7 +343,11 @@ mod tests {
             assert!((b - a).cross(c - a).normalize().y > 0.99);
         }
         for v in &trimesh.vertices {
-            assert!(v.y.abs() < 1e-5 && (-4.0..=6.0).contains(&v.x) && v.z.abs() <= 3.0);
+            assert!(
+                bevy_math::ops::abs(v.y) < 1e-5
+                    && (-4.0..=6.0).contains(&v.x)
+                    && bevy_math::ops::abs(v.z) <= 3.0
+            );
         }
         assert!(
             Collider::half_space(Vec3::Y)

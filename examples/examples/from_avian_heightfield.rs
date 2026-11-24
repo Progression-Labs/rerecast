@@ -4,13 +4,14 @@
 
 use avian_rerecast::prelude::*;
 use avian3d::prelude::*;
+use bevy::math::ops;
 use bevy::{
     asset::RenderAssetUsages,
     color::palettes::tailwind,
     input::common_conditions::input_just_pressed,
     mesh::{Indices, PrimitiveTopology},
     prelude::*,
-    remote::{http::RemoteHttpPlugin, RemotePlugin},
+    remote::{RemotePlugin, http::RemoteHttpPlugin},
 };
 use bevy_rerecast::{debug::DetailNavmeshGizmo, prelude::*};
 
@@ -50,24 +51,22 @@ fn setup(
     let mesh = heightfield_to_mesh(&heights, scale);
 
     // Spawn the heightfield terrain
-commands.spawn((
+    commands.spawn((
         Name::new("Terrain Child test"),
         Visibility::default(),
         Transform::default(),
         children![(
-                Name::new("Child"),
-                Mesh3d(meshes.add(mesh)),
-                MeshMaterial3d(materials.add(StandardMaterial {
-                    base_color: Color::from(tailwind::GREEN_600),
-                    perceptual_roughness: 0.9,
-                    ..default()
-                })),
-                RigidBody::Static,
-                Collider::heightfield(heights, scale.into()),
-        )]
+            Name::new("Child"),
+            Mesh3d(meshes.add(mesh)),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                base_color: Color::from(tailwind::GREEN_600),
+                perceptual_roughness: 0.9,
+                ..default()
+            })),
+            RigidBody::Static,
+            Collider::heightfield(heights, scale),
+        )],
     ));
-
-    
 
     // Add some obstacles on the terrain
     let obstacle_material = materials.add(Color::from(tailwind::GRAY_400));
@@ -129,9 +128,9 @@ fn generate_heights(resolution: usize, frequency: f32) -> Vec<Vec<f32>> {
             let fz = z as f32 / resolution as f32;
 
             // Combine multiple sine waves for interesting terrain
-            let h1 = (fx * frequency).sin() * (fz * frequency).cos();
-            let h2 = (fx * frequency * 2.0 + 1.0).sin() * 0.3;
-            let h3 = (fz * frequency * 1.5).cos() * 0.2;
+            let h1 = ops::sin(fx * frequency) * ops::cos(fz * frequency);
+            let h2 = ops::sin(fx * frequency * 2.0 + 1.0) * 0.3;
+            let h3 = ops::cos(fz * frequency * 1.5) * 0.2;
 
             row.push(h1 + h2 + h3);
         }
@@ -152,6 +151,10 @@ fn heightfield_to_mesh(heights: &[Vec<f32>], scale: Vec3) -> Mesh {
     let mut uvs = Vec::with_capacity(num_x * num_z);
 
     // Generate vertices - iterate in same order as avian's DMatrix storage
+    #[expect(
+        clippy::needless_range_loop,
+        reason = "walks the heights column-major, as avian stores them"
+    )]
     for z in 0..num_z {
         for x in 0..num_x {
             let fx = x as f32 / (num_x - 1) as f32 - 0.5;

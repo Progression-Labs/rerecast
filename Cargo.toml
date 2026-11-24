@@ -13,7 +13,7 @@ categories = ["game-development"]
 readme = "readme.md"
 
 [workspace.dependencies]
-# 0.8.0-dev matches the local bevy-main port patched in below.
+# 0.8.0-dev: the org fork's aurora branch, patched in below.
 avian3d = { version = "0.8.0-dev", default-features = false }
 serde = { version = "1", default-features = false, features = ["alloc"] }
 serde_json = { version = "1", default-features = false, features = ["alloc"] }
@@ -57,7 +57,6 @@ bevy_platform = { git = "https://github.com/bevyengine/bevy", branch = "main", d
 bevy_tasks = { git = "https://github.com/bevyengine/bevy", branch = "main", default-features = false }
 bevy_gizmos = { git = "https://github.com/bevyengine/bevy", branch = "main", default-features = false }
 bevy_material = { git = "https://github.com/bevyengine/bevy", branch = "main", default-features = false }
-bevy_utils = { git = "https://github.com/bevyengine/bevy", branch = "main", default-features = false }
 
 # Workspace crates
 rerecast = { version = "0.4", path = "crates/rerecast", default-features = false }
@@ -77,17 +76,34 @@ bincode = { version = "2", features = ["serde"], default-features = false }
 # bevy_trenchbroom = { version = "0.14.0-rc.2", features = ["avian_f32"] }
 approxim = "0.6"
 
+# The workspace builds against the org's forks on the branches zero's manifests name (zero
+# patches the same way), so it resolves on any machine. avian3d is taken by crates.io version
+# (0.8.0-dev is unpublished); its own dependencies name the org's forks.
 [patch.crates-io]
-# Local port of avian to bevy main (fork farm).
-avian3d = { path = "/mnt/code/f/avian-main/crates/avian3d" }
+avian3d = { git = "https://github.com/Progression-Labs/avian", branch = "aurora" }
 
-# avian3d's support crates have local 17e28cde ports that are ahead of their
-# GitHub bevy-main branches; use the local checkouts.
-[patch."https://github.com/slyedoc/glam_matrix_extras"]
-glam_matrix_extras = { path = "/mnt/code/f/glam_matrix_extras" }
-
-[patch."https://github.com/slyedoc/bevy_transform_interpolation"]
-bevy_transform_interpolation = { path = "/mnt/code/f/bevy_transform_interpolation" }
+[patch."https://github.com/bevyengine/bevy"]
+bevy = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_reflect = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_app = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_camera = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_light = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_remote = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_mesh = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_ecs = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_render = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_transform = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_asset = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_image = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_pbr = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_math = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_shape = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_color = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_derive = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_platform = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_tasks = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_gizmos = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_material = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
 
 [workspace.lints.rust]
 missing_docs = "warn"
