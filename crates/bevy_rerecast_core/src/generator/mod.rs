@@ -178,7 +178,15 @@ fn generate_navmesh(obstacles: ObstacleGather, settings: NavmeshSettings) -> Res
         let _span = tracing::info_span!("navmesh obstacles").entered();
         obstacles.gather()
     };
-    // The count is the bake span's field, given at its creation: Tracy fixes a zone's text then.
+    // The count is the bake span's field, given at its creation (Tracy fixes a zone's text then),
+    // and a plot, which a capture exports.
+    #[cfg(feature = "trace_tracy")]
+    if let Some(client) = tracy_client::Client::running() {
+        client.plot(
+            tracy_client::plot_name!("navmesh triangles"),
+            trimesh.indices.len() as f64,
+        );
+    }
     #[cfg(feature = "tracing")]
     let _span = tracing::info_span!("navmesh bake", triangles = trimesh.indices.len()).entered();
     bake(trimesh, settings)

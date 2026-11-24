@@ -28,6 +28,7 @@ base64 = { version = "0.22", default-features = false, features = ["alloc"] }
 glam = { version = "0.33", default-features = false }
 libm = { version = "0.2", default-features = false }
 tracing = { version = "0.1", default-features = false }
+tracy-client = { version = "0.19", default-features = false }
 critical-section = { version = "1", default-features = false }
 anyhow = { version = "1", default-features = false }
 
