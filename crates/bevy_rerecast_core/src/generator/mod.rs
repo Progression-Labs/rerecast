@@ -175,15 +175,12 @@ pub struct NavmeshReady(pub AssetId<Navmesh>);
 fn generate_navmesh(obstacles: ObstacleGather, settings: NavmeshSettings) -> Result<Navmesh> {
     let trimesh = {
         #[cfg(feature = "tracing")]
-        let _span =
-            tracing::info_span!("navmesh obstacles", triangles = tracing::field::Empty).entered();
-        let trimesh = obstacles.gather();
-        #[cfg(feature = "tracing")]
-        _span.record("triangles", trimesh.indices.len());
-        trimesh
+        let _span = tracing::info_span!("navmesh obstacles").entered();
+        obstacles.gather()
     };
+    // The count is the bake span's field, given at its creation: Tracy fixes a zone's text then.
     #[cfg(feature = "tracing")]
-    let _span = tracing::info_span!("navmesh bake").entered();
+    let _span = tracing::info_span!("navmesh bake", triangles = trimesh.indices.len()).entered();
     bake(trimesh, settings)
 }
 
