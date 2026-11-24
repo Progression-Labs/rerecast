@@ -17,9 +17,12 @@ pub struct NavmeshBackend(pub SystemId<In<NavmeshSettings>, ObstacleGather>);
 /// What a backend hands the generator: the obstacles, still to be turned into one [`TriMesh`].
 ///
 /// The backend runs on the main thread, in the frame the navmesh is queued: it should only pick
-/// the obstacles (cheap handles to their geometry and their transforms) and leave converting them
-/// to triangles to [`Self::gather`], which the generator calls in its task off the main thread.
-/// Converting a place full of colliders in the backend itself cost a frame 3.5 to 4.9 ms.
+/// the obstacles and take what the task needs to read them (a shared handle to each one's
+/// geometry where there is one, as the avian backend's colliders have, or else the least copy of
+/// it, as the `Mesh3d` backend's positions and indices) with their transforms, and leave
+/// converting them to triangles to [`Self::gather`], which the generator calls in its task off
+/// the main thread. Converting a place full of colliders in the backend itself cost a frame 3.5
+/// to 4.9 ms.
 pub struct ObstacleGather(Box<dyn FnOnce() -> TriMesh + Send + 'static>);
 
 impl ObstacleGather {

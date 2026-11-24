@@ -80,7 +80,7 @@ fn get_navmesh_input(In(params): In<Option<Value>>, world: &mut World) -> BrpRes
         });
     };
     let obstacles = match world.run_system_with(*backend_id, params.backend_input) {
-        Ok(obstacles) => obstacles.gather(),
+        Ok(obstacles) => obstacles,
         Err(err) => {
             return Err(BrpError {
                 code: bevy_remote::error_codes::INTERNAL_ERROR,
@@ -176,14 +176,16 @@ fn get_navmesh_input(In(params): In<Option<Value>>, world: &mut World) -> BrpRes
             })
         })
         .collect::<Vec<_>>();
-    let response = PollEditorInputResponse {
-        obstacles,
-        visual_meshes: visuals,
-        materials: serialized_materials,
-        meshes: serialized_meshes,
-        images: serialized_images,
-    };
+    // The obstacles are gathered into triangles in the task, with the serialization, off the
+    // main thread.
     let future = async move {
+        let response = PollEditorInputResponse {
+            obstacles: obstacles.gather(),
+            visual_meshes: visuals,
+            materials: serialized_materials,
+            meshes: serialized_meshes,
+            images: serialized_images,
+        };
         serialize(&response).map_err(|e| BrpError {
             code: bevy_remote::error_codes::INTERNAL_ERROR,
             message: format!("Failed to serialize navmesh input: {e}"),

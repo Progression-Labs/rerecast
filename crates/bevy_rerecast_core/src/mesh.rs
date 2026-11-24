@@ -29,8 +29,10 @@ impl Plugin for Mesh3dBackendPlugin {
 #[reflect(Component)]
 pub struct ExcludeMeshFromNavmesh;
 
-/// Picks the meshes in the frame (a copy of each, with its transform); transforming and
-/// converting them is the [`ObstacleGather`]'s, run in the generator's task.
+/// Picks the meshes in the frame. A mesh asset cannot be read from the task, so this copies
+/// what the conversion reads, each mesh's positions and indices (not its other attributes), with
+/// its transform; transforming them into triangles is the [`ObstacleGather`]'s, run in the
+/// generator's task.
 fn mesh3d_backend(
     input: In<NavmeshSettings>,
     meshes: Res<Assets<Mesh>>,
@@ -46,18 +48,59 @@ fn mesh3d_backend(
             {
                 return None;
             }
-            Some((meshes.get(mesh)?.clone(), transform.compute_transform()))
+            Some((MeshTriangles::of(meshes.get(mesh)?)?, *transform))
         })
         .collect();
     ObstacleGather::new(move || {
         obstacles
             .into_iter()
-            .filter_map(|(mesh, transform)| TriMesh::from_mesh(&mesh.transformed_by(transform)))
+            .map(|(mesh, transform)| mesh.into_trimesh(&transform))
             .fold(TriMesh::default(), |mut acc, t| {
                 acc.extend(t);
                 acc
             })
     })
+}
+
+/// What [`TriMeshFromBevyMesh::from_mesh`] reads of a mesh: its positions and triangle indices.
+struct MeshTriangles {
+    positions: Vec<[f32; 3]>,
+    indices: Vec<UVec3>,
+}
+
+impl MeshTriangles {
+    /// `None` for a mesh that is not a triangle list or has no float3 positions or indices.
+    fn of(mesh: &Mesh) -> Option<Self> {
+        if mesh.primitive_topology() != PrimitiveTopology::TriangleList {
+            return None;
+        }
+        let positions = mesh
+            .attribute(Mesh::ATTRIBUTE_POSITION)?
+            .as_float3()?
+            .to_vec();
+        let indices: Vec<_> = mesh.indices()?.iter().collect();
+        if !indices.len().is_multiple_of(3) {
+            return None;
+        }
+        let indices = indices
+            .chunks(3)
+            .map(|i| UVec3::new(i[0] as u32, i[1] as u32, i[2] as u32))
+            .collect();
+        Some(Self { positions, indices })
+    }
+
+    fn into_trimesh(self, transform: &GlobalTransform) -> TriMesh {
+        let area_types = vec![AreaType::NOT_WALKABLE; self.indices.len()];
+        TriMesh {
+            vertices: self
+                .positions
+                .into_iter()
+                .map(|p| transform.affine().transform_point3a(Vec3A::from_array(p)))
+                .collect(),
+            indices: self.indices,
+            area_types,
+        }
+    }
 }
 
 /// Used to add [`TriMeshFromBevyMesh::from_mesh`] to [`TriMesh`].
@@ -68,27 +111,6 @@ pub trait TriMeshFromBevyMesh {
 
 impl TriMeshFromBevyMesh for TriMesh {
     fn from_mesh(mesh: &Mesh) -> Option<TriMesh> {
-        if mesh.primitive_topology() != PrimitiveTopology::TriangleList {
-            return None;
-        }
-
-        let mut trimesh = TriMesh::default();
-        let position = mesh.attribute(Mesh::ATTRIBUTE_POSITION)?;
-        let float = position.as_float3()?;
-        trimesh.vertices = float.iter().map(|v| Vec3A::from(*v)).collect();
-
-        let indices: Vec<_> = mesh.indices()?.iter().collect();
-        if !indices.len().is_multiple_of(3) {
-            return None;
-        }
-        trimesh.indices = indices
-            .chunks(3)
-            .map(|indices| {
-                UVec3::from_array([indices[0] as u32, indices[1] as u32, indices[2] as u32])
-            })
-            .collect();
-        // TODO: accept vertex attributes for this?
-        trimesh.area_types = vec![AreaType::NOT_WALKABLE; trimesh.indices.len()];
-        Some(trimesh)
+        Some(MeshTriangles::of(mesh)?.into_trimesh(&GlobalTransform::IDENTITY))
     }
 }
